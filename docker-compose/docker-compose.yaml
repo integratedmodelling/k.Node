@@ -1,0 +1,83 @@
+version: '3.5'
+
+services:
+  geoserver:
+    image: registry.integratedmodelling.org/geoserver-netcdf:latest
+    volumes:
+      - geoserver-data:/opt/geoserver/data_dir
+      - app-data:/home/klab/.klab
+    environment:
+      - 'GEOSERVER_DATA_DIR=/opt/geoserver/data_dir'
+      - 'ENABLE_JSONP=true'
+      - 'MAX_FILTER_RULES=20'
+      - 'OPTIMIZE_LINE_WIDTH=false'
+      - 'FOOTPRINTS_DATA_DIR=/opt/footprints_dir'
+      - 'GEOWEBCACHE_CACHE_DIR=/opt/geoserver/data_dir/gwc'
+      - GEOSERVER_ADMIN_PASSWORD=geoserver
+      - 'INITIAL_MEMORY=2G'
+      - 'MAXIMUM_MEMORY=8G'
+    deploy:
+      restart_policy:
+        condition: on-failure
+      # placement:
+      #   constraints: [some-fast-volume-label == true ]
+    ports:
+      - 8082:8080
+
+  postgres:
+    image: kartoza/postgis:11.0-2.5
+    volumes:
+      - psql-data:/var/lib/postgresql
+    environment:
+      - 'POSTGRES_USER=postgres'
+      - 'POSTGRES_PASSWORD=password'
+      - 'POSTGRES_DBNAME=klab'
+      - 'POSTGRES_MULTIPLE_EXTENSIONS=postgis,hstore,postgis_topology,ogr_fdw,fuzzystrmatch,pointcloud,pointcloud_postgis,pgrouting,postgis_raster,postgis_sfcgal,postgis_tiger_geocoder,address_standardizer'
+      - 'ALLOW_IP_RANGE=0.0.0.0/0'
+    deploy:
+      restart_policy:
+        condition: on-failure
+      # placement:
+      #   constraints: [some-fast-volume-label == true ]
+
+
+  app:
+    image: registry.integratedmodelling.org/node-server-16:latest
+    ports:
+      - 9000:8287
+      #- 10001:10001
+    deploy:
+      restart_policy:
+        condition: on-failure
+    secrets:
+      - node-name.cert
+      - application-node-name.yaml
+    command: -cert=/run/secrets/node-name.cert
+    logging:
+      options:
+        max-size: "100m"
+        max-file: "3"
+    environment:
+      - 'JAVA_TOOL_OPTIONS=--illegal-access=permit'
+      - SPRING_CLOUD_BOOTSTRAP_LOCATION=/app/resources/bootstrap.yml
+      - SPRING_CONFIG_LOCATION=/run/secrets/application-node-name.yaml
+    volumes:
+      -  app-data:/home/klab/.klab
+    deploy:
+      restart_policy:
+        condition: on-failure
+      # placement:
+      #   constraints: [some-large-volume-label == true ]
+
+secrets:
+  node-name.cert:
+    file: secrets/node-name.cert
+    name: node-name-${TIMESTAMP}.cert
+  application-node-name.yaml:
+    file: secrets/application-node-name.yaml
+    name: application-node-name-${TIMESTAMP}.yaml
+
+volumes:
+  geoserver-data:
+  psql-data:
+  app-data:
